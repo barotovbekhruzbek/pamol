@@ -1,0 +1,121 @@
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+PROGRAM vaqt
+(*o'zgaruvchilarni e'lon qilish*)
+VAR
+	tmr, tmr2, tmr_f, tmr_sr : TON;
+	sum_mV : REAL;
+	old_weight_tr : REAL;
+	sum_cnt : INT;
+	filtr_mV : REAL;
+	sr_proiz : REAL;
+	sr_cnt : INT;
+	sr_speed : REAL;
+	GetTime: CurTimeEx;
+	TDate: SystemTimeDate;
+	Sys_Time: SysTime64;
+	need_day : UINT;
+END_VAR
+(*o'zgaruvchilarni e'lon qilish*)
+(* @END_DECLARATION := '0' *)
+TDate.Day :=0;
+TDate.DayOfWeek :=0;
+TDate.dwHighMsec :=0;
+TDate.dwLowMSecs :=0;
+TDate.Milliseconds :=0;
+TDate.Minute :=0;
+TDate.Second :=0;
+TDate.Hour :=0;
+TDate.Year :=0;
+TDate.Month :=0;
+Sys_time.ulHigh :=0;
+Sys_time.ulLow :=0;
+GetTime (SystemTime:=Sys_Time , TimeDate:= TDate);
+
+CASE TDate.Month OF
+	1, 3, 5, 7, 8, 10, 12 : need_day := 31; (*Agar 1, 3, .. 12 oy lar bulsa 31 kuni hisoblagichni nolqilish*)
+	2 : IF (TDate.Year MOD 4  = 0 AND TDate.Year MOD 100 > 0 OR TDate.Year MOD 400 = 0) THEN
+			need_day := 29;  (*Agar yil kabisa yili  bulsa 29 kuni hisoblagichni nolqilish*)
+		ELSE
+			need_day := 28;  (*Agar yil kabisa yili EMAS bulsa 29 kuni hisoblagichni nolqilish*)
+		END_IF;
+	4, 6, 9, 11 : need_day := 30; (*Qolgan oylarda 30 kuni nol qilish*)
+END_CASE;
+
+
+(*==========================================================*)
+(* bir soatlik tonnani boshqa registrga yozib qo'yish*)
+IF(TDate.Minute = 59) AND(TDate.Second = 59)THEN
+	mb_count_old_soat_tch := mb_count_soat_tch;
+END_IF;
+IF(TDate.Minute = 0) AND (TDate.Second = 0)  THEN
+	mb_count_soat_tch := 0;
+END_IF;
+(* bir soatlik tonnani boshqa registrga yozib qo'yish*)
+
+(*==========================================================*)
+(* bir smenalik tonnani boshqa registrga yozib qo'yish*)
+IF(TDate.Minute = 59) AND(TDate.Second = 59) AND (TDate.Hour = 7 OR TDate.Hour = 19)THEN
+	mb_count_old_smena := mb_count_smena;
+END_IF;
+IF(TDate.Minute = 0) AND(TDate.Second = 0) AND (TDate.Hour = 8 OR TDate.Hour = 20)THEN
+	mb_count_smena := 0;
+END_IF;
+(* bir smenalik tonnani boshqa registrga yozib qo'yish*)
+(*==========================================================*)
+(* bir oylik tonnani boshqa registrga yozib qo'yish*)
+IF(TDate.Minute = 59) AND(TDate.Second = 59) AND (TDate.Hour = 16) AND (TDate.Day = need_day)THEN
+	mb_count_old_month := mb_count_month;
+END_IF;
+IF(TDate.Minute = 0) AND(TDate.Second = 0) AND (TDate.Hour = 17) AND (TDate.Day = need_day)THEN
+	mb_count_month := 0;
+END_IF;
+(* bir oylik tonnani boshqa registrga yozib qo'yish*)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+(*==========================*)
+
+(*tok_chast := 4+(mmb_speed := (chast * 6.76)/10000;b_percent_chast * 0.16);*
+mb_speed := (chast * 6.76)/10000;
+
+
+
+tmr(in := TRUE, pt := T#1s);
+IF (tmr.Q = FALSE) THEN
+	sum_cnt := sum_cnt + 1;
+	sum_mV := sum_mV / sum_cnt + mV_7016;
+ELSE
+	filtr_mV := mV_7016;
+	sum_mV := 0;
+	sum_cnt := 1;
+	tmr(in := FALSE);
+END_IF;
+*)
+
+
+
+END_PROGRAM

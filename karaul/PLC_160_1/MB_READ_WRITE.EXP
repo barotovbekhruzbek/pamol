@@ -1,0 +1,283 @@
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+PROGRAM mb_read
+VAR
+	get1_modbus: MB_RD_HOLD_REGS;    (*функция 03 - чтение параметра типа INT*)
+	get2_modbus: MB_RD_INP_REGS;		(*функция 04 - чтение трех параметров типа INT*)
+	get3_modbus: MB_RD_HOLD_REGS;	(*функция 03 - чтение параметра типа Float*)
+
+	Buffer: ARRAY[0..255] OF BYTE;		(* байтовый буфер данных *)
+     	cmpl: BOOL;
+	port_opened:  BYTE := 0;
+	Init: BOOL;								(* признак инициализации пользовательской программы *)
+	Settings:COMSETTINGS;				(* настройки последовательного порта *)
+      	com_num: PORTS:=0;				(*0 - RS-485, 1 - RS-232*)
+	enabl: BOOL;							(*состояние работы блока*)
+	err: INT;								(*номер ошибки*)
+	TimeOut: TIME:=T#50ms;				(*таймаут*)
+	Exception: BYTE;
+	DataSize: WORD;
+	master1: BYTE:= 1;
+
+	t: DWORD;						(*переменная для организации счетчика*)
+	A: WORD := 0;					(*счетчик*)
+	x:WORD;						(*считанное значение*)
+	x1: WORD;						(*переменная для записи по сети*)
+	x2: WORD;						(*переменная для записи по сети*)
+	x3: WORD;						(*переменная для записи по сети*)
+	d:  REAL;						(*считанное значение*)
+	ptr_D:POINTER TO BYTE;
+
+	COM_SERVICE1: COM_SERVICE;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(*Организуем счетчик, что бы передавать эти данные по сети*)
+t:=t+1;
+IF (t MOD 1000)=0 THEN
+	A := A + 1;
+		IF A > 9999 THEN
+			A := 0;
+		END_IF
+END_IF
+
+(*Устанавливаем настройки COM-порта*)
+IF port_opened=0 THEN
+		Settings.Port:=com_num;               (*номер COM-порта*)
+		Settings.dwBaudRate:=115200;    (*скорость*)
+		Settings.byParity:=0;
+		Settings.dwTimeout:=0;
+		Settings.byStopBits:=0;
+		Settings.dwBufferSize:=0;
+		Settings.dwScan:=0;
+END_IF
+
+COM_SERVICE1(Enable:=(port_opened=0) , Settings:=Settings , Task:=OPEN_TSK  );
+(*Если COM-порт открыт, то переходим к приему и передачи данных *)
+IF COM_SERVICE1.ready THEN
+	port_opened:=2;
+END_IF
+
+IF port_opened=2 THEN (*Удачно проинициализировали*)
+
+CASE master1 OF
+
+0: (* функция 03 инт  - ФБ считывает значение параметра  типа int из прибора с адресом 2 в регистр с номером 8 по протоколу Modbus-ASCII*)
+get1_modbus(
+	Enable:=enabl ,			(* разрешение работы блока *)
+	Mode:=MB_ASCII ,		(*режим передачи*)
+	DevAddr:=2 ,				(*адрес*)
+	FirstAddr:=8 ,				(*номер регистра*)
+	Quantity:=1,				(*количество регистров*)
+	ComHandle:=Settings.Port , (*номер COM-порта*)
+	TimeOut:=TimeOut , 		(*Таймаут T#50ms*)
+	Buffer:=Buffer ,			(* буфер данных *)
+	Complete=>cmpl ,		(* скопировать признак завершения операции *)
+	Exception=>err ,			(* скопировать регистр ошибок *)
+	ByteCnt=>DataSize );		(*кол-во считанных байтов *)
+(*если установлен признак завершения операции, то *)
+IF cmpl THEN
+	IF err=0 THEN (*Если нет ошибок, то получаем данные из буфера типа INT*)
+		x:=BYTE_TO_WORD(BUFFER[1]) OR SHL(BYTE_TO_WORD(BUFFER[0]),8);
+	END_IF
+	master1:=1; (*переходим к выполнению следующего ФБ*)
+END_IF
+
+1: (* функция 03 флоат - ФБ считывает значение параметра  типа int из прибора с адресом 2 в регистр с номаром 10 по протоколу Modbus-ASCII *)
+get3_modbus(
+	Enable:=enabl ,			(* разрешение работы блока *)
+	Mode:=MB_ASCII ,		(*режим передачи*)
+	DevAddr:=2 ,				(*адрес*)
+	FirstAddr:=10 ,				(*номер регистра*)
+	Quantity:=2,				(*количество регистров*)
+	ComHandle:=Settings.Port ,(*номер COM-порта*)
+	TimeOut:=TimeOut , 		(*Таймаут T#50ms*)
+	Buffer:=Buffer ,			(* буфер данных *)
+	Complete=>cmpl ,		(* скопировать признак завершения операции *)
+	Exception=>err ,			(* скопировать регистр ошибок *)
+	ByteCnt=>DataSize );		(*кол-во считанных байтов *)
+(*если установлен признак завершения операции, то *)
+IF cmpl THEN
+	master1:=2;(*переходим к выполнению следующего ФБ*)
+	IF err=0 THEN (*Если нет ошибок, то получаем  данные из буфера типа FLOAT*)
+		ptr_D:=ADR(d);
+		ptr_D^:=buffer[1];
+		ptr_D:=ptr_D+1;
+		ptr_D^:=buffer[0];
+		ptr_D:=ptr_D+1;
+		ptr_D^:=buffer[3];
+		ptr_D:=ptr_D+1;
+		ptr_D^:=buffer[2];
+	END_IF
+END_IF
+
+2: (* функция 04 инт - ФБ считывает значения трех параметров типа Int из прибора с адресом 2 начиная с регистра с номeром 12*)
+get2_modbus(
+	Enable:= enabl,			(* разрешение работы блока *)
+	Mode:=MB_ASCII ,		(*режим передачи*)
+	DevAddr:=2 ,				(*адрес*)
+	FirstAddr:=12 ,				(*номер регистра*)
+	Quantity:=6 ,				(*количество регистров*)
+	ComHandle:= Settings.Port,(*номер COM-порта*)
+	TimeOut:=TimeOut  , 		(*Таймаут T#50ms*)
+	Buffer:=Buffer ,			(* буфер данных *)
+	Complete=>cmpl ,		(* скопировать признак завершения операции *)
+	Exception=>err ,			(* скопировать регистр ошибок *)
+	ByteCnt=> DataSize);		(*кол-во считанных байтов *)
+(*если установлен признак завершения операции, то *)
+IF cmpl THEN
+	IF err=0 THEN (*Если нет ошибок, то получаем данные из буфера типа INT*)
+		x1:=BYTE_TO_WORD(BUFFER[1]) OR SHL(BYTE_TO_WORD(BUFFER[0]),8);
+		x2:=BYTE_TO_WORD(BUFFER[5]) OR SHL(BYTE_TO_WORD(BUFFER[4]),8);
+		x3:=BYTE_TO_WORD(BUFFER[9]) OR SHL(BYTE_TO_WORD(BUFFER[8]),8);
+	END_IF
+	master1:=0;(*переходим к выполнению следующего ФБ*)
+END_IF
+END_CASE
+
+IF  enabl = FALSE THEN
+ 	enabl := TRUE;
+END_IF
+
+IF  err <> 0 THEN
+ 	enabl := FALSE;
+END_IF
+
+END_IF
+END_PROGRAM
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+PROGRAM mb_write
+VAR
+	send1_modbus:MB_WR_SNG_REG; (*функция 06 - запись параметра*)
+	send2_modbus: MB_WR_REGS;         (*функция 16 - запись параметров*)
+	COM_SERVICE1: COM_SERVICE;	   (*ФБ открытия порта*)
+
+	Buffer: ARRAY[0..255] OF BYTE;		(* байтовый буфер данных *)
+     	cmpl: BOOL;							(* признак завершения операции *)
+	port_opened:  BYTE := 0;				(*состояние порта*)
+	Init: BOOL;								(* признак инициализации пользовательской программы *)
+	Settings:COMSETTINGS;				(* настройки последовательного порта *)
+      	com_num: PORTS:=0;				(*0 - RS-485, 1 - RS-232*)
+	enabl: BOOL;							(*состояние работы блока*)
+	err: INT;								(*номер ошибки*)
+	TimeOut: TIME:=T#50ms;				(*таймаут*)
+	Exception: BYTE;
+	DataSize: WORD;
+	master1: BYTE;
+
+	t: DWORD;					(*переменная для организации счетчика*)
+	A: WORD := 0;				(*счетчик*)
+	f1:DINT:=65;				(*Записываемый параметр типа DINT*)
+	f2:REAL:=12.7;			(*Записываемый параметр типа REAL*)
+	ptr_f2:POINTER TO BYTE;
+
+END_VAR
+(* @END_DECLARATION := '0' *)
+(*Организуем счетчик, что бы передавать эти данные по сети*)
+t:=t+1;
+IF (t MOD 1000)=0 THEN
+	A := A + 1;
+		IF A > 9999 THEN
+			A := 0;
+		END_IF
+END_IF
+
+(*Устанавливаем настройки COM-порта*)
+IF port_opened=0 THEN
+		Settings.Port:=com_num;               (*номер COM-порта*)
+		Settings.dwBaudRate:=115200;    (*скорость*)
+		Settings.byParity:=0;
+		Settings.dwTimeout:=0;
+		Settings.byStopBits:=0;
+		Settings.dwBufferSize:=0;
+		Settings.dwScan:=0;
+END_IF
+
+(*Открываем COM-порт*)
+COM_SERVICE1(Enable:=(port_opened=0) , Settings:=Settings , Task:=OPEN_TSK  );
+(*Если COM-порт открыт, то переходим к приему и передачи данных *)
+IF COM_SERVICE1.ready THEN
+	port_opened:=2;
+END_IF
+
+IF port_opened=2 THEN (*Удачно проинициализировали*)
+
+CASE master1 OF
+
+0:  (* функция 06  - запись параметра типа Int в прибор с адресом 1 в регистр 0*)
+send1_modbus(
+	Enable:=enabl ,				(* разрешение работы блока *)
+	Mode:=MB_ASCII ,			(*режим передачи*)
+	DevAddr:=1 ,					(*адрес*)
+	RegAddr:=0 ,					(*регистр*)
+	Value:=A,						(*значение переменной, которое надо передать*)
+      ComHandle:= Settings.Port, 	(*номер сом-порта*)
+	TimeOut:=TimeOut ,			(*таймаут T#50ms*)
+	Complete=>cmpl ,			(* скопировать признак завершения операции *)
+	Exception=>err );				(* скопировать регистр ошибок *)
+(*если установлен признак завершения операции, то *)
+IF cmpl THEN
+	master1:=1; (*переходим к выполнению следующего блока*)
+END_IF
+
+1: (* функция 16  - запись параметров типа Int (регистр 4) и Real (регистр 6) в прибор с адресом 2 *)
+(*запись в буффер параметра типа INT*)
+Buffer[1] := DINT_TO_BYTE(f1);
+Buffer[0] := DINT_TO_BYTE( SHR(f1,8));
+Buffer[3] := DINT_TO_BYTE( SHR(f1,16));
+Buffer[2] := DINT_TO_BYTE( SHR(f1,24));
+
+(*запись в буффер параметра типа Float*)
+ptr_f2:=ADR(f2);
+     buffer[5] := ptr_f2^;
+     ptr_f2:=ptr_f2+1;
+     buffer[4] := ptr_f2^;
+     ptr_f2:=ptr_f2+1;
+     buffer[7] := ptr_f2^;
+     ptr_f2:=ptr_f2+1;
+     buffer[6] := ptr_f2^;
+
+send2_modbus(
+	Enable:= enabl,			(* разрешение работы блока *)
+	Mode:=MB_ASCII ,		(*режим передачи*)
+	DevAddr:=2 , 				(*адрес*)
+	FirstAddr:= 4, 				(*номер регистра*)
+	Quantity:= 4,   				(*количество записываемых регистров*)
+	ComHandle:=Settings.Port ,(*номер сом-порта*)
+	TimeOut:=TimeOut ,		(*таймаут T#50ms*)
+	Buffer:=Buffer ,			(* буфер данных *)
+	Complete=>cmpl ,		(* скопировать признак завершения операции *)
+	Exception=>err ,			(* скопировать регистр ошибок *)
+	RegCnt=> DataSize);		(*кол-во считанных байтов *)
+(*если установлен признак завершения операции, то *)
+IF cmpl THEN
+	master1:=0;(*переходим к выполнению следующего блока*)
+END_IF
+
+END_CASE
+
+IF  enabl = FALSE THEN
+ 	enabl := TRUE;
+END_IF
+IF  err <> 0 THEN
+ 	enabl := FALSE;
+END_IF
+
+END_IF
+
+
+
+
+
+
+
+
+END_PROGRAM
